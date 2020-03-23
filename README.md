@@ -13,4 +13,5 @@ Chong Sun <chongs0419@gmail.com>
 Dependency
 ----------
 
-*[pyscf] (https://github.com/pyscf/pyscf)
+* [pyscf](https://github.com/pyscf/pyscf)
+

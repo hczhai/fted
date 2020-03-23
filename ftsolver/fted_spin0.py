@@ -249,7 +249,7 @@ def solve_mu(h1e,g2e,norb,nelec,beta,mu0=0.0,bmax=1e3, \
             return jac
 
     res = minimize(func, mu0, method="CG", jac=grad, \
-                   options={'disp':True, 'gtol':1e-4, 'maxiter':10})
+                   options={'disp':True, 'gtol':1e-6, 'maxiter':10})
     mu_n = res.x[0]
     print("Converged mu for ED solver: mu(ED) = %10.12f"%mu_n)
 
@@ -334,4 +334,4 @@ if __name__ == '__main__':
 
     T = 0.01
     dm1,_,e1 = rdm12s_fted((h1e,h1e),(g2e*0, g2e, g2e*0),norb,nelec,T,mu, symm='UHF')
-    print e1/norb#+u/2.
+    print(e1/norb)#+u/2.

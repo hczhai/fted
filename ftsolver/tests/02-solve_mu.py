@@ -6,7 +6,7 @@ Chong Sun, Feb. 26, 2020
 import numpy as np
 import numpy
 import sys
-sys.path.append("/home/sunchong/work/ftsolver/ftsolver")
+sys.path.append("..")
 import fted
 
 from pyscf import gto, scf, ao2mo
@@ -33,7 +33,7 @@ beta = 1
 
 #ne, _ = fted.elec_number(mu0,h1e,eri,norb,beta,symm='RHF')
 #print ne
-mu = fted.solve_mu(h1e,eri,norb,nelec,beta,mu0,symm='RHF')[0]
-print mu
+mu = fted.solve_mu(h1e,eri,norb,nelec,beta,mu0,symm='RHF')
+print(mu)
 ne, _ = fted.elec_number(mu,h1e,eri,norb,beta,symm='RHF')
-print ne
+print(ne)

@@ -137,23 +137,3 @@ if __name__ == "__main__":
             print e/norb - e0/norb
             print np.linalg.norm(rdm1-rdm10)
             print np.linalg.norm(rdm2-rdm20)
-      
-      
-      
-      
-      
-      
-      
-      
-      
-      
-      
-      
-      
-      
-      
-      
-      
-      
-      
-      
