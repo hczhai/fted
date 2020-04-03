@@ -51,6 +51,9 @@ def eigvals(h1e, g2e, norb, nelec, fcisolver):
 def gc_ensemble_eigs(h1e, g2e, norb, symm='UHF'):
     if symm is 'RHF':
         from pyscf.fci import direct_spin1 as fcisolver
+    elif symm is 'UEG':
+        from pyscf.fci import direct_nosym as fcisolver
+        fcisolver = fcisolver.FCISolver()
     elif symm is 'SOC':
         from pyscf.fci import fci_slow_spinless as fcisolver
     elif symm is 'UHF':
@@ -60,7 +63,7 @@ def gc_ensemble_eigs(h1e, g2e, norb, symm='UHF'):
     
     ref = []
     for na in range(0, norb + 1):
-        for nb in range(na if symm is 'RHF' else 0, norb + 1):
+        for nb in range(na if symm is 'RHF' or symm is 'UEG' else 0, norb + 1):
             print("\r%3d%% " % ((na * norb + nb) * 100 // ((norb + 1) * norb)), end='', flush=True)
             ew = eigvals(h1e, g2e, norb, (na, nb), fcisolver)
             ref.append((na, nb, ew))
@@ -73,13 +76,14 @@ def expectation(ref, mu, beta, symm):
         E0 = ref[0][2][0]
         assert (fn is None) ^ (fe is None)
         for na, nb, E in ref:
+            E = np.array(E, dtype=np.float128)
             ex = np.exp(-(E - E0 - mu * (na + nb)) * beta)
             z = np.sum(ex)
             if fn is not None:
                 x = fn(na, nb) * z
             elif fe is not None:
                 x = np.sum(fe(E) * ex)
-            if symm is 'RHF' and na != nb:
+            if (symm is 'RHF' or symm is 'UEG') and na != nb:
                 z, x = z * 2, x * 2
             Z += z
             X += x
@@ -88,7 +92,7 @@ def expectation(ref, mu, beta, symm):
 
 def elec_number(ref, mu, beta, symm):
     expect = expectation(ref, mu, beta, symm=symm)
-    if symm == 'RHF':
+    if symm == 'RHF' or symm is 'UEG':
         N  = expect(fn=lambda na, nb: na + nb)
         NN = expect(fn=lambda na, nb: (na + nb) ** 2)
         DN = beta * (NN - N * N)
@@ -109,7 +113,7 @@ def energy(ref, mu, beta, symm='UHF'):
 
 def solve_mu(ref, mu0, beta, nelec, symm):
     def solve(mu):
-        if symm is 'RHF':
+        if symm is 'RHF' or symm is 'UEG':
             n, dn = elec_number(ref, mu, beta, symm)
             diff = n - nelec
             return diff ** 2, 2 * diff * dn

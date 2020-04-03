@@ -18,7 +18,7 @@ from pyblock.qchem.ancilla import *
 from pyblock.qchem.operator import OpNames
 from pyblock.qchem.fcidump import write_fcidump
 from pyblock.qchem.thermal import FreeEnergy
-from pyblock.algorithm import ExpoApply, Compress, Expect
+from pyblock.algorithm import ExpoApply, Compress, Expect, DMRG
 
 class FTDMRGError(Exception):
     pass
@@ -72,6 +72,7 @@ class FTDMRG:
         self.fcidump = self.scratch + '/' + 'FCIDUMP.%d' % self.n_sites
         self.init_mps = self.scratch + '/' + 'mps.initial.%d' % self.n_sites
         self.final_mps = self.scratch + '/' + 'mps.final.%d' % self.n_sites
+        self.final_gs_mps = self.scratch + '/' + 'mps.final.gs.%d' % self.n_sites
         self.ridx = None
 
         self.opts = dict(
@@ -103,6 +104,7 @@ class FTDMRG:
         self.fcidump = self.scratch + '/' + 'FCIDUMP.%d' % self.n_sites
         self.init_mps = self.scratch + '/' + 'mps.initial.%d' % self.n_sites
         self.final_mps = self.scratch + '/' + 'mps.final.%d' % self.n_sites
+        self.final_gs_mps = self.scratch + '/' + 'mps.final.gs.%d' % self.n_sites
 
         if self.verbose < 2:
             from pyblock.algorithm import time_evolution, expectation, compress, dmrg
@@ -345,6 +347,48 @@ class FTDMRG:
         else:
             return partna, partnb
 
+    def ground_state_energy(self, bond_dims, noise):
+        """
+        Perform ground-state DMRG calculation.
+        """
+        
+        from pyblock.qchem import MPS as GSMPS, MPO as GSMPO, MPOInfo as GSMPOInfo, LineCoupling as GSLineCoupling
+        
+        if self.verbose >= 2:
+            print('>>> START dmrg <<<')
+        t = time.perf_counter()
+        
+        self.opts["page"] = DMRGDataPage(save_dir=self.scratch, n_frames=1)
+        opts = self.opts.copy()
+        opts["nelec"] = self.n_elec if opts["su2"] else self.n_alpha + self.n_beta
+        
+        with BlockHamiltonian.get(**opts) as hamil:
+
+            mpo_info  = GSMPOInfo(hamil)
+            
+            lcp = GSLineCoupling(hamil.n_sites, hamil.site_basis, hamil.empty, hamil.target)
+            lcp.set_bond_dimension(bond_dims[0] if isinstance(bond_dims, list) else bond_dims)
+            mps = GSMPS(lcp, center=0, dot=2)
+            mps.canonicalize(random=True)
+            
+            mps_info = MPSInfo(lcp)
+            ctr = DMRGContractor(mps_info,  mpo_info, self.simplifier, davidson_tol=1E-9)
+            
+            ctr.page.activate({'_BASE'})
+            mpo = GSMPO(hamil)
+            
+            dmrg = DMRG(mpo, mps, bond_dims=bond_dims, noise=noise, contractor=ctr)
+            ener = dmrg.solve(100, 1E-9)
+            mps0 = dmrg.mps
+            normsq = 1.0
+        
+        pickle.dump((mps0, mps_info, dmrg.forward, normsq, bond_dims), open(self.final_gs_mps, "wb" ))
+
+        if self.verbose >= 2:
+            print('>>> COMPLETE dmrg | Time = %.2f <<<' % (time.perf_counter() - t))
+        
+        return ener
+        
     def energy(self, beta, beta_step, mu, bond_dims):
         """
         Perform time evolution and evaluate energy at last step.
@@ -405,7 +449,7 @@ class FTDMRG:
         
         return ener
     
-    def optimize_mu(self, beta, beta_step, mu0, bond_dims):
+    def optimize_mu(self, beta, beta_step, mu0, bond_dims, tol=1E-6, maxiter=10):
         """
         Find mu for expected number of electrons.
 
@@ -543,7 +587,10 @@ class FTDMRG:
                     mu_cache[mu] = solve(mu)
                 return mu_cache[mu][1]
 
-            opt_mu = scipy.optimize.minimize(f, mu0, method="CG", jac=g, options={'disp': False, 'gtol': 1e-4, 'maxiter': 10})
+            opt_mu = scipy.optimize.minimize(f, mu0, method="CG", jac=g,
+                                             options={'disp': False, 'gtol': tol, 'maxiter': maxiter})
+            if not opt_mu.success:
+                print('optimization not success!!')
 
         if self.verbose >= 2:
             print('>>> COMPLETE optimize mu | Time = %.2f <<<' % (time.perf_counter() - t))
@@ -609,7 +656,13 @@ class FTDMRG:
         
         if self.verbose >= 2:
             print('>>> COMPLETE generate initial mps | Time = %.2f <<<' % (time.perf_counter() - t))
-
+    
+    def write_fcidump_general(self, n_mo, n_elec, h1e, g2e):
+        """Write orbitals to FCIDUMP file from integrals with no assumed symmetry."""
+        assert h1e.shape == (n_mo, n_mo)
+        assert g2e.shape == (n_mo, n_mo, n_mo, n_mo)
+        write_fcidump(self.fcidump, h1e, g2e, n_mo, n_elec, nuc=0.0, ms=0, orbsym=None, tol=1e-13)
+    
     def write_fcidump(self, mol):
         """Write orbitals to FCIDUMP file for the molecule."""
         if self.opts["su2"]:
