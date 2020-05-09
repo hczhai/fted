@@ -297,6 +297,50 @@ class FTDMRG:
             return np.concatenate([dm[None, :, :], dm[None, :, :]], axis=0) / 2
         else:
             return np.concatenate([dm[None, :, :, 0, 0], dm[None, :, :, 1, 1]], axis=0)
+    
+    def get_particle_number_correlation(self, recover_orb_order=True):
+        """
+        Return particle number correlation matrix for final MPS.
+        su2 return shape: (norb, norb)
+         sz return shape: (nspin=2, nspin=2, norb, norb)
+        
+        This only works when a final MPS is already in scratch directory. Use `self.energy` to generate final MPS.
+        """
+        
+        if self.verbose >= 2:
+            print('>>> START nrm <<<')
+        t = time.perf_counter()
+        
+        self.opts["page"] = DMRGDataPage(save_dir=self.scratch, n_frames=1)
+        
+        with BlockHamiltonian.get(**self.opts) as hamil:
+            
+            pmpo_info = NRMMPOInfo(hamil)
+            
+            mps0, mps_info, forward, normsq, bond_dims = pickle.load(open(self.final_mps, 'rb'))
+            
+            pctr = DMRGContractor(mps_info, pmpo_info, Simplifier(PDM1Rules(su2=self.opts["su2"])))
+            pctr.page.activate({'_BASE'})
+            pmpo = NRMMPO(hamil)
+            
+            ex = Expect(pmpo, mps0, mps0, mps0.form, None, contractor=pctr)
+            ex.solve(forward=forward, bond_dim=bond_dims)
+            
+            if self.opts["su2"]:
+                dm = ex.get_1pdm_spatial(normsq=normsq)
+            else:
+                dm = ex.get_1pdm(normsq=normsq)
+        
+        if self.verbose >= 2:
+            print('>>> COMPLETE nrm | Time = %.2f <<<' % (time.perf_counter() - t))
+
+        if recover_orb_order:
+            dm[:, :] = dm[self.ridx, :][:, self.ridx]
+
+        if self.opts["su2"]:
+            return dm
+        else:
+            return np.transpose(dm, (2, 3, 0, 1))
 
     def get_particle_number(self):
         """

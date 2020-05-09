@@ -43,11 +43,17 @@ def test_1pdm(scratch, symm):
     dm = ft.get_one_pdm(recover_orb_order=True)
     pickle.dump(dm, open(scratch % symm + "/dm.tmp", "wb"))
 
+def test_nrm(scratch, symm):
+    ft = pickle.load(open(scratch % symm + "/ftdmrg.tmp", "rb"))
+    nrm = ft.get_particle_number_correlation(recover_orb_order=True)
+    pickle.dump(nrm, open(scratch % symm + "/nrm.tmp", "wb"))
+
 if __name__ == '__main__':
     N = 4
+    max_R = 4.0
     symm = 'UHF'
     # prepare initial MPS
-    for r in np.arange(1.4, 4.0, 0.4):
+    for r in np.arange(1.4, max_R, 0.4):
         print('PREPARING R = %.1f' % r)
         R = r * BOHR
         mol = gto.M(atom = [['H', (i * R, 0, 0)] for i in range(N)],
@@ -56,12 +62,18 @@ if __name__ == '__main__':
         prepare(mol=mol, scratch=scratch, symm=symm, m=bond_dim)
     # test
     beta = 1
-    for r in np.arange(1.4, 4.0, 0.4):
+    for r in np.arange(1.4, max_R, 0.4):
         print('TESTING R = %.1f ' % r)
         scratch = pscratch + '/FTDMRG-H%d-%.1f-%%s' % (N, r)
         test_energy(scratch=scratch, symm=symm, mu0=0, beta=beta, step=0.25, m=bond_dim)
     # test 1pdm
-    for r in np.arange(1.4, 4.0, 0.4):
+    for r in np.arange(1.4, max_R, 0.4):
         print('TESTING 1PDM R = %.1f ' % r)
         scratch = pscratch + '/FTDMRG-H%d-%.1f-%%s' % (N, r)
         test_1pdm(scratch=scratch, symm=symm)
+    # test nrm
+    for r in np.arange(1.4, max_R, 0.4):
+        print('TESTING NRM R = %.1f ' % r)
+        scratch = pscratch + '/FTDMRG-H%d-%.1f-%%s' % (N, r)
+        test_nrm(scratch=scratch, symm=symm)
+
